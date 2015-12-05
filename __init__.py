@@ -32,6 +32,7 @@ import itertools
 import time
 import glob
 import fnmatch
+import contextlib
 from functools import partial
 try:
     import readline  # @UnusedImport
@@ -226,6 +227,22 @@ def glob_one(expression):
     return res[0]
 
 
+def open_serial_port(port_glob, baudrate=None, timeout=None, use_contextmanager=True):
+    try:
+        import serial
+    except ImportError:
+        fatal('Please install the missing dependency: pip3 install pyserial')
+
+    baudrate = baudrate or 115200
+    timeout = timeout or 1
+    port = glob_one(port_glob)
+
+    ser = serial.Serial(port, baudrate, timeout=timeout)
+    if use_contextmanager:
+        ser = contextlib.closing(ser)
+    return ser
+
+
 def _print_impl(color, fmt, *args, end='\n'):
     sys.stdout.write(colorama.Style.BRIGHT)  # @UndefinedVariable
     sys.stdout.write(color)
@@ -273,8 +290,8 @@ class AbortException(DrwatsonException):
     pass
 
 
-def abort(reason):
-    raise AbortException(str(reason))
+def abort(fmt, *args):
+    raise AbortException(str(fmt) % args)
 
 
 def run(handler):
