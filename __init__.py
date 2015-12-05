@@ -30,6 +30,8 @@ import argparse
 import threading
 import itertools
 import time
+import glob
+import fnmatch
 from functools import partial
 try:
     import readline  # @UnusedImport
@@ -186,6 +188,42 @@ def download(url, encoding=None):
     else:
         with open(url, 'rb') as f:
             return decode(f.read())
+
+
+def download_newest(glob_url, encoding=None):
+    try:
+        import easywebdav
+    except ImportError:
+        fatal('Please install the missing dependency: pip3 install easywebdav')
+
+    protocol, _rest = glob_url.split('://', 1)
+    domain_name, path_glob = _rest.split('/', 1) if '/' in _rest else (_rest, '')
+    path_glob = '/' + path_glob
+    directory = path_glob if path_glob.endswith('/') else path_glob.rsplit('/', 1)[0]
+
+    c = easywebdav.connect(domain_name, protocol=protocol)
+
+    matching_item = None
+    for item in sorted(c.ls(directory), key=lambda x: x.ctime, reverse=True):
+        if item.name.strip('/') == directory.strip('/'):
+            continue
+        if fnmatch.fnmatch(item.name, path_glob):
+            matching_item = item
+            break
+
+    if not matching_item:
+        raise DrwatsonException('No entry at WebDAV %r', glob_url)
+
+    return download('%s://%s%s' % (protocol, domain_name, matching_item.name), encoding=encoding)
+
+
+def glob_one(expression):
+    res = glob.glob(expression)
+    if len(res) == 0:
+        raise DrwatsonException('Could not find matching filesystem entry: %r' % expression)
+    if len(res) != 1:
+        raise DrwatsonException('Expected one filesystem entry, found %d: %r' % (len(res), expression))
+    return res[0]
 
 
 def _print_impl(color, fmt, *args, end='\n'):
