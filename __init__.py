@@ -41,12 +41,14 @@ except ImportError:
 
 
 DEFAULT_SERVER = 'licensing.zubax.com'
+SUPPORT_EMAIL = 'licensing@zubax.com'
 APP_DATA_PATH = os.path.join(os.path.expanduser("~"), '.zubax', 'drwatson')
+LOG_FILE_PATH = 'drwatson.log'
 REQUEST_TIMEOUT = 20
 
 
-# Default config - log everything into a file; stderr loggers will be added later
-logging.basicConfig(filename='drwatson.log', level=logging.DEBUG,
+# Default config - log everything into a file; stderr loggers will be added from init()
+logging.basicConfig(filename=LOG_FILE_PATH, level=logging.DEBUG,
                     format='%(asctime)s %(levelname)-8s %(name)-25s %(message)s')
 
 logger = logging.getLogger(__name__)
@@ -246,8 +248,7 @@ def open_serial_port(port_glob, baudrate=None, timeout=None, use_contextmanager=
 
 
 def _print_impl(color, fmt, *args, end='\n'):
-    sys.stdout.write(colorama.Style.BRIGHT)  # @UndefinedVariable
-    sys.stdout.write(color)
+    sys.stdout.write(colorama.Style.BRIGHT + color)  # @UndefinedVariable
     sys.stdout.write(fmt % args)
     if end:
         sys.stdout.write(end)
@@ -312,7 +313,7 @@ def run(handler):
 
             handler()
 
-            info('Completed successfully')
+            info('COMPLETED SUCCESSFULLY')
         except KeyboardInterrupt:
             info('Exit')
             break
@@ -405,7 +406,8 @@ def init(description, *arg_initializers, require_root=False):
     imperative('\tFOLLOW INSTRUCTIONS IN GREEN')
     error('\tERRORS ARE REPORTED IN RED')
     info('\tINFO MESSAGES ARE PRINTED IN WHITE')
-    info('Press CTRL+C to exit the application')
+    info('Press CTRL+C to exit the application. In case of technical difficulties,\n'
+         'please send the file %r to %s.', LOG_FILE_PATH, SUPPORT_EMAIL)
 
     return args
 
