@@ -294,6 +294,11 @@ def abort(fmt, *args):
     raise AbortException(str(fmt) % args)
 
 
+def enforce(condition, fmt, *args):
+    if not condition:
+        abort(fmt, *args)
+
+
 def run(handler):
     while True:
         try:
