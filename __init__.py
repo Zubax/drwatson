@@ -378,6 +378,8 @@ def init(description, *arg_initializers, require_root=False):
     for name, lg in logging.Logger.manager.loggerDict.items():  # @UndefinedVariable
         if name.startswith('urllib'):
             continue
+        if not hasattr(lg, 'level'):
+            continue
         if lg.level < logging_level:
             lg.setLevel(logging_level)
 
