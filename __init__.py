@@ -507,3 +507,36 @@ class SerialCLI:
                 break
             lines.append(ln)
         return lines
+
+
+class BackgroundSpinner(threading.Thread):
+    """This class is designed to make periodic calls to a specified target in the background.
+    Usage:
+
+    with BackgroundSpinner(target):
+        long_operation()
+
+    If you need to use this class you're probably doing something wrong. ;)
+    """
+
+    def __init__(self, target, *args, **kwargs):
+        super(BackgroundSpinner, self).__init__(name='background_spinner:' + repr(target), daemon=True)
+        self._spin_target = lambda: target(*args, **kwargs)
+        self._keep_going = True
+
+    def run(self):
+        while self._keep_going:
+            try:
+                self._spin_target()
+            except Exception:
+                logger.error('Async spinner error', exc_info=True)
+
+    def __enter__(self):
+        logger.debug('Starting BackgroundSpinner [%r]', self)
+        self.start()
+
+    def __exit__(self, _type, _value, _traceback):
+        logger.debug('Stopping BackgroundSpinner [%r]...', self)
+        self._keep_going = False
+        self.join()
+        logger.debug('BackgroundSpinner [%r] stopped', self)
