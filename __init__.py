@@ -403,6 +403,17 @@ def init(description, *arg_initializers, require_root=False):
     return args
 
 
+def catch(exception=Exception, return_on_catch=None):
+    def decorate(function):
+        def wrapper(*args, **kwargs):
+            try:
+                return function(*args, **kwargs)
+            except exception:
+                return return_on_catch
+        return wrapper
+    return decorate
+
+
 class CLIWaitCursor(threading.Thread):
     """Usage:
     with CLIWaitCursor():
@@ -437,3 +448,54 @@ class CLIWaitCursorSuppressor:
 
     def __exit__(self, _type, _value, _traceback):
         CLIWaitCursor.SUPPRESSED -= 1
+
+
+class SerialCLI:
+    """This class is designed for interaction with serial port based CLI.
+    """
+
+    def __init__(self, serial_port, default_timeout=None):
+        self._io = serial_port
+        self._echo_bytes = []
+        self.default_timeout = default_timeout or 1
+
+    def flush_input(self, delay=None):
+        if delay:
+            time.sleep(delay)
+        self._io.flushInput()
+
+    def write_line(self, fmt, *args):
+        bs = ((fmt % args) + '\r\n').encode()
+        self._io.write(bs)
+        self._echo_bytes += list(bs)
+
+    def read_line(self, timeout=None):
+        """Returns a tuple (bool, str). The first item is False if the timeout has expired, otherwise True.
+        """
+        self._io.timeout = timeout if timeout is not None else self.default_timeout
+        out_bytes = []
+        timed_out = False
+        while True:
+            b = self._io.read(1)
+            if not b:
+                timed_out = True
+                break
+            b = b[0]
+            if self._echo_bytes and b == self._echo_bytes[0]:
+                self._echo_bytes.pop(0)
+            else:
+                out_bytes.append(b)
+                if b == b'\n'[0]:
+                    break
+
+        return timed_out, bytes(out_bytes).decode().strip() if out_bytes else None
+
+    def write_line_and_read_output_lines_until_timeout(self, fmt, *args, timeout=None):
+        self.write_line(fmt, *args)
+        lines = []
+        while True:
+            to, ln = self.read_line(timeout)
+            if to:
+                break
+            lines.append(ln)
+        return lines
