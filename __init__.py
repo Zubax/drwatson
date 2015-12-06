@@ -260,11 +260,11 @@ info = partial(_print_impl, colorama.Fore.WHITE)        # @UndefinedVariable
 _native_input = input
 
 
-def input(fmt, *args, yes_no=False):            # @ReservedAssignment
+def input(fmt, *args, yes_no=False, default_answer=False):  # @ReservedAssignment
     with CLIWaitCursorSuppressor():
         text = fmt % args
         if yes_no:
-            text = text.rstrip() + ' (y/N) '
+            text = text.rstrip() + (' (Y/n) ' if default_answer else ' (y/N) ')
 
         sys.stdout.write(colorama.Style.BRIGHT)     # @UndefinedVariable
         sys.stdout.write(colorama.Fore.GREEN)       # @UndefinedVariable
@@ -274,7 +274,10 @@ def input(fmt, *args, yes_no=False):            # @ReservedAssignment
         sys.stdout.flush()
 
         if yes_no:
-            out = (out[0].lower() == 'y') if out else False
+            if default_answer:
+                out = (out[0].lower() != 'n') if out else True
+            else:
+                out = (out[0].lower() == 'y') if out else False
             info('Answered %s', 'YES' if out else 'NO')
             return out
         else:
