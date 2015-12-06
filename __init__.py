@@ -261,7 +261,7 @@ _native_input = input
 
 
 def input(fmt, *args, yes_no=False, default_answer=False):  # @ReservedAssignment
-    with CLIWaitCursorSuppressor():
+    with CLIWaitCursor.Suppressor():
         text = fmt % args
         if yes_no:
             text = text.rstrip() + (' (Y/n) ' if default_answer else ' (y/N) ')
@@ -418,9 +418,18 @@ class CLIWaitCursor(threading.Thread):
     """Usage:
     with CLIWaitCursor():
         long_operation()
+        with CLIWaitCursor.Suppressor():
+            input('Input: ')    # No wait cursor here
     """
 
     SUPPRESSED = 0
+
+    class Suppressor:
+        def __enter__(self):
+            CLIWaitCursor.SUPPRESSED += 1
+
+        def __exit__(self, _type, _value, _traceback):
+            CLIWaitCursor.SUPPRESSED -= 1
 
     def __init__(self):
         super(CLIWaitCursor, self).__init__(name='wait_cursor_spinner', daemon=True)
@@ -440,14 +449,6 @@ class CLIWaitCursor(threading.Thread):
                 sys.stdout.write(next(self.spinner) + '\033[1D')
                 sys.stdout.flush()
             time.sleep(0.1)
-
-
-class CLIWaitCursorSuppressor:
-    def __enter__(self):
-        CLIWaitCursor.SUPPRESSED += 1
-
-    def __exit__(self, _type, _value, _traceback):
-        CLIWaitCursor.SUPPRESSED -= 1
 
 
 class SerialCLI:
