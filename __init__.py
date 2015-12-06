@@ -45,12 +45,14 @@ APP_DATA_PATH = os.path.join(os.path.expanduser("~"), '.zubax', 'drwatson')
 REQUEST_TIMEOUT = 20
 
 
-colorama.init()
-
-# Default config - can be overriden later
-logging.basicConfig(stream=sys.stderr, level=logging.WARN, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
+# Default config - log everything into a file; stderr loggers will be added later
+logging.basicConfig(filename='drwatson.log', level=logging.DEBUG,
+                    format='%(asctime)s %(levelname)-8s %(name)-25s %(message)s')
 
 logger = logging.getLogger(__name__)
+logger.info('STARTED')
+
+colorama.init()
 
 server = DEFAULT_SERVER
 
@@ -183,7 +185,7 @@ def download(url, encoding=None):
         if r.status_code == 200:
             r.raw.decode_content = True
             data = r.raw.read()
-            logging.info('Downloaded %d bytes from %r', len(data), url)
+            logger.info('Downloaded %d bytes from %r', len(data), url)
             return decode(data)
         raise DrwatsonException('Could not download %r: %r' % (url, r))
     else:
@@ -383,13 +385,18 @@ def init(description, *arg_initializers, require_root=False):
         2: logging.DEBUG
     }.get(args.verbose, logging.DEBUG)
 
-    for name, lg in logging.Logger.manager.loggerDict.items():  # @UndefinedVariable
-        if name.startswith('urllib'):
-            continue
-        if not hasattr(lg, 'level'):
-            continue
-        if lg.level < logging_level:
-            lg.setLevel(logging_level)
+    max_logger_name_len = max(map(len, logging.Logger.manager.loggerDict.keys()))                  # @UndefinedVariable
+    formatter = logging.Formatter('{}%(asctime)s %(levelname)-.1s %(name)-{}s{} %(message)s'
+                                  .format(colorama.Style.BRIGHT + colorama.Fore.BLUE,              # @UndefinedVariable
+                                          max_logger_name_len,
+                                          colorama.Style.RESET_ALL),                               # @UndefinedVariable
+                                  datefmt='%H:%M:%S')
+
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setLevel(logging_level)
+    handler.setFormatter(formatter)
+
+    logging.root.addHandler(handler)
 
     if require_root and os.geteuid() != 0:
         fatal('This program requires superuser priveleges')
