@@ -257,6 +257,7 @@ def _print_impl(color, fmt, *args, end='\n'):
 
 imperative = partial(_print_impl, colorama.Fore.GREEN)  # @UndefinedVariable
 error = partial(_print_impl, colorama.Fore.RED)         # @UndefinedVariable
+warning = partial(_print_impl, colorama.Fore.YELLOW)    # @UndefinedVariable
 info = partial(_print_impl, colorama.Fore.WHITE)        # @UndefinedVariable
 
 
@@ -405,6 +406,7 @@ def init(description, *arg_initializers, require_root=False):
     info('Color legend:')
     imperative('\tFOLLOW INSTRUCTIONS IN GREEN')
     error('\tERRORS ARE REPORTED IN RED')
+    warning('\tWARNINGS ARE REPORTED IN YELLOW')
     info('\tINFO MESSAGES ARE PRINTED IN WHITE')
     info('Press CTRL+C to exit the application. In case of technical difficulties,\n'
          'please send the file %r to %s.', LOG_FILE_PATH, SUPPORT_EMAIL)
