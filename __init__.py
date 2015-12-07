@@ -309,13 +309,13 @@ def run(handler):
     while True:
         try:
             print('=' * 80)
-            input('Press ENTER to begin')
+            input('Press ENTER to begin, Ctrl+C to exit')
 
             handler()
 
             info('COMPLETED SUCCESSFULLY')
         except KeyboardInterrupt:
-            info('Exit')
+            info('\nExit')
             break
         except AbortException as ex:
             error('ABORTED: %s', str(ex))
