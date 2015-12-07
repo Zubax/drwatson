@@ -268,14 +268,13 @@ def input(fmt, *args, yes_no=False, default_answer=False):  # @ReservedAssignmen
     with CLIWaitCursor.Suppressor():
         text = fmt % args
         if yes_no:
-            text = text.rstrip() + (' (Y/n) ' if default_answer else ' (y/N) ')
+            text = text.rstrip() + (' (Y/n)' if default_answer else ' (y/N)')
+        if text[-1] not in ' \t\r\n':
+            text += ' '
 
-        sys.stdout.write(colorama.Style.BRIGHT)     # @UndefinedVariable
-        sys.stdout.write(colorama.Fore.GREEN)       # @UndefinedVariable
-
-        out = _native_input(text)
-        sys.stdout.write(colorama.Style.RESET_ALL)  # @UndefinedVariable
-        sys.stdout.flush()
+        out = _native_input(colorama.Style.BRIGHT + colorama.Fore.GREEN +   # @UndefinedVariable
+                            text +
+                            colorama.Style.RESET_ALL)                       # @UndefinedVariable
 
         if yes_no:
             if default_answer:
