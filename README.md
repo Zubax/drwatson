@@ -1,6 +1,6 @@
 # Drwatson
 
-Drwatson production testing framework.
+Drwatson is a hardware production testing framework written in Python 3.
 
 This repository is designed for use as a submodule, e.g.:
 
@@ -14,3 +14,12 @@ python3
 
 * Ubuntu-based OS
 * Python 3.4 or newer
+
+### Mandatory Python dependencies
+
+* `colorama`
+
+### Optional Python dependencies
+
+* `easywebdav`
+* `pyserial`

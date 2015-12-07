@@ -533,7 +533,7 @@ class BackgroundSpinner(threading.Thread):
             try:
                 self._spin_target()
             except Exception:
-                logger.error('Async spinner error', exc_info=True)
+                logger.error('Background spinner error', exc_info=True)
 
     def __enter__(self):
         logger.debug('Starting BackgroundSpinner [%r]', self)
