@@ -315,6 +315,7 @@ def run(handler):
 
             info('COMPLETED SUCCESSFULLY')
         except KeyboardInterrupt:
+            logger.debug('KeyboardInterrupt in main loop', exc_info=True)
             info('\nExit')
             break
         except AbortException as ex:
