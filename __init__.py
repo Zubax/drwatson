@@ -288,6 +288,7 @@ _native_input = input
 def input(fmt, *args, yes_no=False, default_answer=False):  # @ReservedAssignment
     with CLIWaitCursor.Suppressor():
         text = fmt % args
+        ui_logger.debug('INPUT\n' + text)
         if yes_no:
             text = text.rstrip() + (' (Y/n)' if default_answer else ' (y/N)')
         if text[-1] not in ' \t\r\n':
