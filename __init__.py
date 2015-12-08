@@ -50,6 +50,7 @@ REQUEST_TIMEOUT = 20
 # Default config - log everything into a file; stderr loggers will be added from init()
 logging.basicConfig(filename=LOG_FILE_PATH, level=logging.DEBUG,
                     format='%(asctime)s %(levelname)-8s %(name)-25s %(message)s')
+logging.getLogger('uavcan.dsdl.parser').setLevel(logging.INFO)
 
 logger = logging.getLogger(__name__)
 logger.info('STARTED')
