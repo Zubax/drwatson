@@ -546,3 +546,33 @@ class BackgroundSpinner(threading.Thread):
         self._keep_going = False
         self.join()
         logger.debug('BackgroundSpinner [%r] stopped', self)
+
+
+class BackgroundDelay(threading.Thread):
+    """This class will invoke a specified callback from a background thread after the specified timeout expires.
+    It is designed for use with a context - the timer will stop automatically once the current context is exited.
+    Usage:
+
+    with BackgroundDelay(10, die, 'The operation did not complete in 10 seconds!!'):
+        long_operation()
+    """
+
+    def __init__(self, delay, target, *args, **kwargs):
+        super(BackgroundDelay, self).__init__(name='background_dead_man_switch:' + repr(target), daemon=True)
+        self._delay = delay
+        self._dms_target = lambda: target(*args, **kwargs)
+        self._event = threading.Event()
+
+    def run(self):
+        if not self._event.wait(self._delay):
+            self._dms_target()
+
+    def __enter__(self):
+        logger.debug('Starting BackgroundDelay [%r]', self)
+        self.start()
+
+    def __exit__(self, _type, _value, _traceback):
+        logger.debug('Stopping BackgroundDelay [%r]...', self)
+        self._event.set()
+        self.join()
+        logger.debug('BackgroundDelay [%r] stopped', self)
