@@ -244,6 +244,18 @@ def open_serial_port(port_glob, baudrate=None, timeout=None, use_contextmanager=
     logger.debug('Opening serial port %r baudrate %r timeout %r',
                  port, baudrate, timeout)
 
+    # TODO FIXME HACK
+    # The line below is not supposed to exist - it is an ugly workaround to some sort of PySerial bug.
+    # The problem is that in certain cases certain USB-UART adapters (like DroneCode Probe) do not work
+    # (either use incorrect baud rate or read() call blocks forever despite timeout) until this operation
+    # is performed on them.
+    # Steps to reproduce:
+    # 1. Connect DroneCode Probe via USB hub (not sure if hub is involved)
+    # 2. Without doing anything with the connected adapter, open serial port using pyserial at 115200 with timeout
+    # 3. Call readlines(). The call will either hang forever or return garbage.
+    # The problem requires deeper investigation.
+    execute_shell_command('stty -F %s %d', port, baudrate)
+
     ser = serial.Serial(port, baudrate, timeout=timeout)
     if use_contextmanager:
         ser = contextlib.closing(ser)
