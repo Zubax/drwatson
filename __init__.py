@@ -250,18 +250,24 @@ def open_serial_port(port_glob, baudrate=None, timeout=None, use_contextmanager=
     return ser
 
 
-def _print_impl(color, fmt, *args, end='\n'):
+ui_logger = logging.getLogger(__name__ + '_ui')
+
+
+def _print_impl(logging_header, color, fmt, *args, end='\n'):
+    text = fmt % args
+    ui_logger.debug(logging_header + '\n' + text)
+
     sys.stdout.write(colorama.Style.BRIGHT + color)  # @UndefinedVariable
-    sys.stdout.write(fmt % args)
+    sys.stdout.write(text)
     if end:
         sys.stdout.write(end)
     sys.stdout.write(colorama.Style.RESET_ALL)  # @UndefinedVariable
     sys.stdout.flush()
 
-imperative = partial(_print_impl, colorama.Fore.GREEN)  # @UndefinedVariable
-error = partial(_print_impl, colorama.Fore.RED)         # @UndefinedVariable
-warning = partial(_print_impl, colorama.Fore.YELLOW)    # @UndefinedVariable
-info = partial(_print_impl, colorama.Fore.WHITE)        # @UndefinedVariable
+imperative = partial(_print_impl, 'IMPERATIVE', colorama.Fore.GREEN)    # @UndefinedVariable
+error = partial(_print_impl, 'ERROR', colorama.Fore.RED)                # @UndefinedVariable
+warning = partial(_print_impl, 'WARNING', colorama.Fore.YELLOW)         # @UndefinedVariable
+info = partial(_print_impl, 'INFO', colorama.Fore.WHITE)                # @UndefinedVariable
 
 
 _native_input = input
@@ -290,9 +296,12 @@ def input(fmt, *args, yes_no=False, default_answer=False):  # @ReservedAssignmen
             return out
 
 
-def fatal(fmt, *args):
+def fatal(fmt, *args, use_abort=False):
     error(fmt, *args)
-    exit(1)
+    if use_abort:
+        os.abort()
+    else:
+        exit(1)
 
 
 class AbortException(DrwatsonException):
