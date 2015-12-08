@@ -288,7 +288,7 @@ _native_input = input
 def input(fmt, *args, yes_no=False, default_answer=False):  # @ReservedAssignment
     with CLIWaitCursor.Suppressor():
         text = fmt % args
-        ui_logger.debug('INPUT\n' + text)
+        ui_logger.debug('INPUT REQUEST\n' + text)
         if yes_no:
             text = text.rstrip() + (' (Y/n)' if default_answer else ' (y/N)')
         if text[-1] not in ' \t\r\n':
@@ -297,6 +297,8 @@ def input(fmt, *args, yes_no=False, default_answer=False):  # @ReservedAssignmen
         out = _native_input(colorama.Style.BRIGHT + colorama.Fore.GREEN +   # @UndefinedVariable
                             text +
                             colorama.Style.RESET_ALL)                       # @UndefinedVariable
+
+        ui_logger.debug('INPUT RESPONSE\n' + out)
 
         if yes_no:
             if default_answer:
