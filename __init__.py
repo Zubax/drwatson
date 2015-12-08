@@ -240,6 +240,8 @@ def open_serial_port(port_glob, baudrate=None, timeout=None, use_contextmanager=
     baudrate = baudrate or 115200
     timeout = timeout or 1
     port = glob_one(port_glob)
+    logger.debug('Opening serial port %r baudrate %r timeout %r',
+                 port, baudrate, timeout)
 
     ser = serial.Serial(port, baudrate, timeout=timeout)
     if use_contextmanager:
