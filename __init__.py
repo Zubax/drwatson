@@ -134,7 +134,7 @@ def make_api_context_with_user_provided_credentials():
         try:
             imperative('Enter your credentials for %r', server)
 
-            provided_login = input(('Login [%s]: ' % login) if login else 'Login: ')
+            provided_login = input(('Login [%s]: ' % login) if login else 'Login: ', same_line=True)
             login = provided_login or login
 
             imperative('Password: ', end='')
@@ -285,14 +285,14 @@ info = partial(_print_impl, 'INFO', colorama.Fore.WHITE)                # @Undef
 _native_input = input
 
 
-def input(fmt, *args, yes_no=False, default_answer=False):  # @ReservedAssignment
+def input(fmt, *args, yes_no=False, default_answer=False, same_line=False):  # @ReservedAssignment
     with CLIWaitCursor.Suppressor():
         text = fmt % args
         ui_logger.debug('INPUT REQUEST\n' + text)
         if yes_no:
             text = text.rstrip() + (' (Y/n)' if default_answer else ' (y/N)')
-        if text[-1] not in ' \t\r\n':
-            text += ' '
+        if text[-1] not in (' \t\r\n' if same_line else '\r\n'):
+            text += ' ' if same_line else '\n'
 
         out = _native_input(colorama.Style.BRIGHT + colorama.Fore.GREEN +   # @UndefinedVariable
                             text +
