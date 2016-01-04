@@ -527,7 +527,7 @@ class SerialCLI:
                 if b == b'\n'[0]:
                     break
 
-        return timed_out, bytes(out_bytes).decode().strip() if out_bytes else None
+        return timed_out, bytes(out_bytes).decode('utf8', 'ignore').strip() if out_bytes else None
 
     def write_line_and_read_output_lines_until_timeout(self, fmt, *args, timeout=None):
         self.write_line(fmt, *args)
