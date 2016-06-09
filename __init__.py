@@ -33,6 +33,7 @@ import time
 import glob
 import fnmatch
 import contextlib
+import tempfile
 from functools import partial
 try:
     import readline  # @UnusedImport
@@ -601,3 +602,39 @@ class BackgroundDelay(threading.Thread):
         self._event.set()
         self.join()
         logger.debug('BackgroundDelay [%r] stopped', self)
+
+
+def load_firmware_via_gdb(firmware_data,
+                          toolchain_prefix,
+                          load_offset,
+                          gdb_port,
+                          gdb_monitor_scan_command):
+    with tempfile.TemporaryDirectory('-drwatson') as tmpdir:
+        logger.debug('Executable scratchpad directory: %r', tmpdir)
+        fn = lambda x: os.path.join(tmpdir, x)
+        runtc = lambda fmt, *a, **kw: execute_shell_command(toolchain_prefix + fmt, *a, **kw)
+
+        # Generating ELF from the downloaded binary
+        with open(fn('fw.bin'), 'wb') as f:
+            f.write(firmware_data)
+
+        with open(fn('link.ld'), 'w') as f:
+            f.write('SECTIONS { . = %s; .text : { *(.text) } }' % load_offset)
+
+        runtc('ld -b binary -r -o %s %s', fn('tmp.elf'), fn('fw.bin'))
+        runtc('objcopy --rename-section .data=.text --set-section-flags .data=alloc,code,load %s', fn('tmp.elf'))
+        runtc('ld %s -T %s -o %s', fn('tmp.elf'), fn('link.ld'), fn('output.elf'))
+
+        # Loading the ELF onto the target
+        with open(fn('script.gdb'), 'w') as f:
+            f.write('\n'.join([
+                'target extended-remote %s' % gdb_port,
+                'mon %s' % gdb_monitor_scan_command,
+                'attach 1',
+                'load',
+                'compare-sections',
+                'kill',
+                'quit 0'
+            ]))
+
+        runtc('gdb %s --batch -x %s -return-child-result -silent', fn('output.elf'), fn('script.gdb'))
