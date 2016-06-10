@@ -655,3 +655,17 @@ def load_firmware_via_gdb(firmware_data,
             ]))
 
         runtc('gdb %s --batch -x %s -return-child-result -silent', fn('output.elf'), fn('script.gdb'))
+
+
+def convert_units_from_to(value, input_units, output_units):
+    # Normalize input to SI
+    value = {
+        'kelvin': value,
+        'celsius': value + 273.15,
+    }[input_units.lower()]
+
+    # Convert SI to the output units
+    return {
+        'kelvin': value,
+        'celsius': value - 273.15
+    }[output_units.lower()]
