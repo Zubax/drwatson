@@ -494,6 +494,9 @@ class SerialCLI:
     """This class is designed for interaction with serial port based CLI.
     """
 
+    MAX_WRITE_CHUNK_SIZE = 16
+    DELAY_AFTER_CHUNK_WRITE = 0.01
+
     def __init__(self, serial_port, default_timeout=None):
         self._io = serial_port
         self._echo_bytes = []
@@ -507,7 +510,15 @@ class SerialCLI:
     def write_line(self, fmt, *args):
         bs = ((fmt % args) + '\r\n').encode()
         logger.debug('SerialCLI: Writing %r', bs)
-        self._io.write(bs)
+
+        def split_in_chunks(data, chunk_size):
+            return [data[x: x + chunk_size] for x in range(0, len(data), chunk_size)]
+
+        # Some USB-UART adapters lose their shit if they need to handle more than a hundred bytes at once
+        for chunk in split_in_chunks(bs, self.MAX_WRITE_CHUNK_SIZE):
+            self._io.write(chunk)
+            time.sleep(self.DELAY_AFTER_CHUNK_WRITE)
+
         self._echo_bytes += list(bs)
 
     def read_line(self, timeout=None):
