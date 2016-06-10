@@ -558,6 +558,40 @@ class SerialCLI:
         return lines
 
 
+class BackgroundCLIListener(threading.Thread):
+    """This class listens to the CLI serial port and extracts lines in the background.
+    Extracted lines reported via an asynchronous callback.
+    """
+
+    READ_TIMEOUT = 0.1
+
+    def __init__(self, serial_port, line_callback):
+        super(BackgroundCLIListener, self).__init__(name='background_cli_listener:' + repr(line_callback), daemon=True)
+        self._cli = SerialCLI(serial_port, self.READ_TIMEOUT)
+        self._line_callback = line_callback
+        self._keep_going = True
+
+    def run(self):
+        while self._keep_going:
+            try:
+                timed_out, line = self._cli.read_line()
+                if not timed_out:
+                    self._line_callback(line)
+            except Exception:
+                logger.error('BackgroundCLIListener error', exc_info=True)
+
+    def __enter__(self):
+        logger.debug('Starting BackgroundCLIListener [%r]', self)
+        self.start()
+        return self
+
+    def __exit__(self, *_whatever):
+        logger.debug('Stopping BackgroundCLIListener [%r]...', self)
+        self._keep_going = False
+        self.join()
+        logger.debug('BackgroundCLIListener [%r] stopped', self)
+
+
 class BackgroundSpinner(threading.Thread):
     """This class is designed to make periodic calls to a specified target in the background.
     Usage:
