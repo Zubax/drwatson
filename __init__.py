@@ -506,6 +506,7 @@ class SerialCLI:
 
     def write_line(self, fmt, *args):
         bs = ((fmt % args) + '\r\n').encode()
+        logger.debug('SerialCLI: Writing %r', bs)
         self._io.write(bs)
         self._echo_bytes += list(bs)
 
@@ -524,11 +525,16 @@ class SerialCLI:
             if self._echo_bytes and b == self._echo_bytes[0]:
                 self._echo_bytes.pop(0)
             else:
+                if self._echo_bytes:
+                    logger.info('SerialCLI: Echo mismatch: got %r, expected %r. Buffer overflow or output interlacing?',
+                                chr(b), chr(self._echo_bytes[0]))
                 out_bytes.append(b)
                 if b == b'\n'[0]:
                     break
 
-        return timed_out, bytes(out_bytes).decode('utf8', 'ignore').strip() if out_bytes else None
+        line = bytes(out_bytes).decode('utf8', 'ignore').strip() if out_bytes else None
+        logger.debug('SerialCLI: Read %r [timeout=%s]', line, timed_out)
+        return timed_out, line
 
     def write_line_and_read_output_lines_until_timeout(self, fmt, *args, timeout=None):
         self.write_line(fmt, *args)
