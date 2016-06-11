@@ -605,8 +605,6 @@ class SerialCLI:
                     break
 
         line = bytes(out_bytes).decode('utf8', 'ignore').strip() if out_bytes else None
-        if not timed_out:
-            logger.debug('SerialCLI: Read %r', line)
         return timed_out, line
 
     def write_line_and_read_output_lines_until_timeout(self, fmt, *args, timeout=None):
