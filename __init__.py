@@ -34,6 +34,7 @@ import glob
 import fnmatch
 import contextlib
 import tempfile
+import binascii
 from functools import partial
 try:
     import readline  # @UnusedImport
@@ -45,12 +46,12 @@ DEFAULT_SERVER = 'licensing.zubax.com'
 SUPPORT_EMAIL = 'licensing@zubax.com'
 APP_DATA_PATH = os.path.join(os.path.expanduser("~"), '.zubax', 'drwatson')
 LOG_FILE_PATH = 'drwatson.log'
+LOG_RECORD_FORMAT = '%(asctime)s %(levelname)-8s %(name)-25s %(message)s'
 REQUEST_TIMEOUT = 20
 
 
 # Default config - log everything into a file; stderr loggers will be added from init()
-logging.basicConfig(filename=LOG_FILE_PATH, level=logging.DEBUG,
-                    format='%(asctime)s %(levelname)-8s %(name)-25s %(message)s')
+logging.basicConfig(filename=LOG_FILE_PATH, level=logging.DEBUG, format=LOG_RECORD_FORMAT)
 logging.getLogger('uavcan.dsdl.parser').setLevel(logging.INFO)
 
 logger = logging.getLogger(__name__)
@@ -111,13 +112,29 @@ class APIContext:
         return self._call('balance')
 
     def generate_signature(self, unique_id, product_name):
-        resp = self._call('signature/generate', unique_id=_b64_encode(unique_id), product_name=product_name)
+        resp = self._call('signature/generate',
+                          unique_id=_b64_encode(unique_id),
+                          product_name=product_name)
+
         resp._b64_decode_existing_params(['unique_id', 'signature'])
         return resp
 
     def verify_signature(self, unique_id, product_name, signature):
-        return self._call('signature/verify', unique_id=_b64_encode(unique_id),
-                          product_name=product_name, signature=_b64_encode(signature))
+        return self._call('signature/verify',
+                          unique_id=_b64_encode(unique_id),
+                          product_name=product_name,
+                          signature=_b64_encode(signature))
+
+    def upload_test_report(self, unique_id, product_name, successful, test_report):
+        # Chto mne sneg chto me znoi chto mne dozhdik prolivnoi
+        if isinstance(test_report, bytes):
+            test_report = test_report.decode('utf8', 'ignore')
+        # ...kogda moi druzia so mnoi
+        return self._call('test_report',
+                          product_name=product_name,
+                          unique_id=_b64_encode(unique_id),
+                          successful=successful,
+                          report_text=test_report)
 
 
 def make_api_context_with_user_provided_credentials():
@@ -333,26 +350,70 @@ def enforce(condition, fmt, *args):
         abort(fmt, *args)
 
 
-def run(handler):
+def run(api_context: APIContext, handler):
+    """
+    Args:
+        api_context:    An instance of APIContext.
+
+        handler:        A callable that accepts one argument. The argument is also a callable, that must be invoked
+                        with the product name and unique ID of the connected device as soon as it becomes known.
+                        Signature:
+                            callback(product_name, unique_id)
+    """
     while True:
-        try:
-            print('=' * 80)
-            input('Press ENTER to begin, Ctrl+C to exit')
+        product_id = None
+        unique_id = None
+        success = False
 
-            handler()
+        def set_device_info(product_id_, unique_id_):
+            nonlocal product_id, unique_id
+            product_id = product_id_
+            unique_id = unique_id_
+            logger.info('Device identified: PID: %r, UID: %s', product_id, binascii.hexlify(unique_id))
 
-            info('COMPLETED SUCCESSFULLY')
-        except KeyboardInterrupt:
-            logger.debug('KeyboardInterrupt in main loop', exc_info=True)
-            info('\nExit')
-            break
-        except AbortException as ex:
-            error('ABORTED: %s', str(ex))
-        except Exception as ex:
-            logger.info('Main loop error: %r', ex, exc_info=True)
-            error('FAILURE: %r', ex)
-        finally:
-            sys.stdout.write(colorama.Style.RESET_ALL)  # @UndefinedVariable
+        with LogCollector() as log_collector:
+            try:
+                # So, I was going to write something very smart here,
+                # but Papa Johns delivery guy brought pizza and thus wrecked my train of thoughts.
+                # No survivors.
+                print('=' * 80)
+                input('Press ENTER to begin, Ctrl+C to exit')
+
+                handler(set_device_info)
+                success = True
+
+                info('COMPLETED SUCCESSFULLY')
+            except KeyboardInterrupt:
+                logger.debug('KeyboardInterrupt in main loop', exc_info=True)
+                info('\nExit')
+                break
+            except AbortException as ex:
+                error('ABORTED: %s', str(ex))
+            except Exception as ex:
+                logger.info('Main loop error: %r', ex, exc_info=True)
+                error('FAILURE: %r', ex)
+            finally:
+                sys.stdout.write(colorama.Style.RESET_ALL)  # @UndefinedVariable
+
+                # The pizza was good though.
+                # noinspection PyBroadException
+                try:
+                    if unique_id is not None:
+                        with CLIWaitCursor():
+                            log_messages = log_collector.take_messages()
+                            logger.info('Uploading %d lines of log; PID: %r, UID: %s',
+                                        len(log_messages),
+                                        product_id,
+                                        binascii.hexlify(unique_id))
+                            test_report = '\n'.join(log_messages)
+                            api_context.upload_test_report(unique_id=unique_id,
+                                                           product_name=product_id,
+                                                           successful=success,
+                                                           test_report=test_report)
+                    else:
+                        logger.info('Log uploading skipped - device not identified')
+                except Exception:
+                    logger.error('Could not process logs', exc_info=True)
 
 
 def execute_shell_command(fmt, *args, ignore_failure=False):
@@ -544,7 +605,8 @@ class SerialCLI:
                     break
 
         line = bytes(out_bytes).decode('utf8', 'ignore').strip() if out_bytes else None
-        logger.debug('SerialCLI: Read %r [timeout=%s]', line, timed_out)
+        if not timed_out:
+            logger.debug('SerialCLI: Read %r', line)
         return timed_out, line
 
     def write_line_and_read_output_lines_until_timeout(self, fmt, *args, timeout=None):
@@ -703,3 +765,39 @@ def convert_units_from_to(value, input_units, output_units):
         'kelvin': value,
         'celsius': value - 273.15
     }[output_units.lower()]
+
+
+class LogCollector(logging.Handler):
+    # noinspection PyShadowingBuiltins
+    def __init__(self, format=None):
+        logging.Handler.__init__(self)
+        self._messages = []
+        self._lock = threading.RLock()
+        self.setLevel(logging.DEBUG)
+        self.setFormatter(logging.Formatter(format or LOG_RECORD_FORMAT))
+
+    def __enter__(self):
+        with self._lock:
+            logging.root.addHandler(self)
+            return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        with self._lock:
+            logging.root.removeHandler(self)
+            if exc_type is not None:
+                logger.info('LogCollector is closing due to an exception',
+                            exc_info=(exc_type, exc_value, exc_traceback))
+
+    def emit(self, record):
+        with self._lock:
+            try:
+                msg = self.format(record)
+                self._messages.append(msg)
+            except Exception as ex:
+                print('LogCollector failed to emit the log record %r; error: %r' % (record, ex))
+
+    def take_messages(self):
+        with self._lock:
+            msgs = self._messages
+            self._messages = []
+            return msgs
