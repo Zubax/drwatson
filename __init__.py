@@ -35,6 +35,7 @@ import fnmatch
 import contextlib
 import tempfile
 import binascii
+import eventlet
 from functools import partial
 try:
     import readline  # @UnusedImport
@@ -58,6 +59,9 @@ logger = logging.getLogger(__name__)
 logger.info('STARTED')
 
 colorama.init()
+
+# Clearly, this artifact is full of dark magic. If something fails mysteriously, try to remove this thing and try again.
+eventlet.monkey_patch()
 
 server = DEFAULT_SERVER
 
@@ -92,9 +96,11 @@ class APIContext:
         endpoint = _make_api_endpoint(self.login, self.password, call)
         if len(arguments):
             data = json.dumps(arguments)
-            resp = requests.post(endpoint, data=data, timeout=REQUEST_TIMEOUT)
+            with eventlet.Timeout(REQUEST_TIMEOUT):
+                resp = requests.post(endpoint, data=data, timeout=REQUEST_TIMEOUT)
         else:
-            resp = requests.get(endpoint, timeout=REQUEST_TIMEOUT)
+            with eventlet.Timeout(REQUEST_TIMEOUT):
+                resp = requests.get(endpoint, timeout=REQUEST_TIMEOUT)
 
         if resp.status_code == http_codes.PAYMENT_REQUIRED:
             raise APIException('PAYMENT REQUIRED [%s]' % resp.text)
@@ -396,24 +402,29 @@ def run(api_context: APIContext, handler):
                 sys.stdout.write(colorama.Style.RESET_ALL)  # @UndefinedVariable
 
                 # The pizza was good though.
-                # noinspection PyBroadException
-                try:
-                    if unique_id is not None:
-                        with CLIWaitCursor():
-                            log_messages = log_collector.take_messages()
-                            logger.info('Uploading %d lines of log; PID: %r, UID: %s',
-                                        len(log_messages),
-                                        product_id,
-                                        binascii.hexlify(unique_id))
-                            test_report = '\n'.join(log_messages)
-                            api_context.upload_test_report(unique_id=unique_id,
-                                                           product_name=product_id,
-                                                           successful=success,
-                                                           test_report=test_report)
-                    else:
-                        logger.info('Log uploading skipped - device not identified')
-                except Exception:
-                    logger.error('Could not process logs', exc_info=True)
+                if unique_id is not None:
+                    while True:
+                        # FIXME TODO: logs that failed to upload should be stored on the disk and uploaded later!
+                        try:
+                            with CLIWaitCursor():
+                                log_messages = log_collector.take_messages()
+                                logger.info('Uploading %d lines of log; PID: %r, UID: %s',
+                                            len(log_messages),
+                                            product_id,
+                                            binascii.hexlify(unique_id))
+                                test_report = '\n'.join(log_messages)
+                                api_context.upload_test_report(unique_id=unique_id,
+                                                               product_name=product_id,
+                                                               successful=success,
+                                                               test_report=test_report)
+                        except Exception as ex:
+                            logger.error('Could not upload logs, will retry', exc_info=True)
+                            error('Could not upload logs, will retry [%s]', ex)
+                            time.sleep(1)
+                        else:
+                            break
+                else:
+                    logger.info('Log uploading skipped - device not identified')
 
 
 def execute_shell_command(fmt, *args, ignore_failure=False):

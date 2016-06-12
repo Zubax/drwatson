@@ -18,6 +18,7 @@ python3
 ### Mandatory Python dependencies
 
 * `colorama`
+* `eventlet`
 
 ### Optional Python dependencies
 
