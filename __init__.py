@@ -381,14 +381,14 @@ def run(api_context: APIContext, handler):
             unique_id = unique_id_
             logger.info('Device identified: PID: %r, UID: %s', product_id, binascii.hexlify(unique_id))
 
+        print('=' * 80)
+        input('Press ENTER to begin, Ctrl+C to exit')       # We don't need this in logs
+
         with LogCollector() as log_collector:
             try:
                 # So, I was going to write something very smart here,
                 # but Papa Johns delivery guy brought pizza and thus wrecked my train of thoughts.
                 # No survivors.
-                print('=' * 80)
-                input('Press ENTER to begin, Ctrl+C to exit')
-
                 handler(set_device_info)
                 success = True
 
