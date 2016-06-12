@@ -21,6 +21,7 @@ assert sys.version[0] == '3'
 import requests
 import getpass
 import json
+import yaml
 import os
 import base64
 import logging
@@ -251,24 +252,34 @@ def download_newest(glob_url, encoding=None):
     return download('%s://%s%s' % (protocol, domain_name, matching_item.name), encoding=encoding)
 
 
-def glob_one(expression):
+def glob_one(expression, return_none_if_not_found=False):
     res = glob.glob(expression)
     if len(res) == 0:
+        if return_none_if_not_found:
+            return
         raise DrwatsonException('Could not find matching filesystem entry: %r' % expression)
     if len(res) != 1:
         raise DrwatsonException('Expected one filesystem entry, found %d: %r' % (len(res), expression))
     return res[0]
 
 
-def open_serial_port(port_glob, baudrate=None, timeout=None, use_contextmanager=True):
+def open_serial_port(port_glob, baudrate=None, timeout=None, use_contextmanager=True, wait_for_port=0):
     try:
         import serial
     except ImportError:
         fatal('Please install the missing dependency: pip3 install pyserial')
 
+    while True:
+        port = glob_one(port_glob, return_none_if_not_found=True)
+        if port:
+            break
+        if wait_for_port <= 0:
+            raise DrwatsonException('Serial port glob returned no matches [%r]' % port_glob)
+        wait_for_port -= 1
+        time.sleep(1)
+
     baudrate = baudrate or 115200
     timeout = timeout or 1
-    port = glob_one(port_glob)
     logger.debug('Opening serial port %r baudrate %r timeout %r',
                  port, baudrate, timeout)
 
@@ -574,6 +585,7 @@ class SerialCLI:
         self._io = serial_port
         self._echo_bytes = []
         self.default_timeout = default_timeout or 1
+        self.flush_input(self.default_timeout)
 
     def flush_input(self, delay=None):
         if delay:
@@ -628,6 +640,17 @@ class SerialCLI:
                 break
             lines.append(ln)
         return lines
+
+    def read_zubax_id(self):
+        zubax_id_lines = self.write_line_and_read_output_lines_until_timeout('zubax_id')
+        zubax_id_lines_joined = '\n'.join(zubax_id_lines)
+        try:
+            zubax_id = yaml.load(zubax_id_lines_joined)
+        except Exception:
+            logger.info('Could not parse YAML: %r', zubax_id_lines_joined)
+            raise
+        logger.info('SerialCLI: Zubax ID: %r', zubax_id)
+        return zubax_id
 
 
 class BackgroundCLIListener(threading.Thread):
