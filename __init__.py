@@ -135,10 +135,14 @@ class APIContext:
         # Chto mne sneg chto me znoi chto mne dozhdik prolivnoi
         if isinstance(test_report, bytes):
             test_report = test_report.decode('utf8', 'ignore')
+
         # ...kogda moi druzia so mnoi
+        if unique_id:
+            unique_id = _b64_encode(unique_id)
+
         return self._call('test_report',
                           product_name=product_name,
-                          unique_id=_b64_encode(unique_id),
+                          unique_id=unique_id,
                           successful=successful,
                           report_text=test_report)
 
@@ -402,29 +406,26 @@ def run(api_context: APIContext, handler):
                 sys.stdout.write(colorama.Style.RESET_ALL)  # @UndefinedVariable
 
                 # The pizza was good though.
-                if unique_id is not None:
-                    while True:
-                        # FIXME TODO: logs that failed to upload should be stored on the disk and uploaded later!
-                        try:
-                            with CLIWaitCursor():
-                                log_messages = log_collector.take_messages()
-                                logger.info('Uploading %d lines of log; PID: %r, UID: %s',
-                                            len(log_messages),
-                                            product_id,
-                                            binascii.hexlify(unique_id))
-                                test_report = '\n'.join(log_messages)
-                                api_context.upload_test_report(unique_id=unique_id,
-                                                               product_name=product_id,
-                                                               successful=success,
-                                                               test_report=test_report)
-                        except Exception as ex:
-                            logger.error('Could not upload logs, will retry', exc_info=True)
-                            error('Could not upload logs, will retry [%s]', ex)
-                            time.sleep(1)
-                        else:
-                            break
-                else:
-                    logger.info('Log uploading skipped - device not identified')
+                while True:
+                    # FIXME TODO: logs that failed to upload should be stored on the disk and uploaded later!
+                    try:
+                        with CLIWaitCursor():
+                            log_messages = log_collector.take_messages()
+                            logger.info('Uploading %d lines of log; PID: %r, UID: %s',
+                                        len(log_messages),
+                                        product_id,
+                                        binascii.hexlify(unique_id) if unique_id else unique_id)
+                            test_report = '\n'.join(log_messages)
+                            api_context.upload_test_report(unique_id=unique_id,
+                                                           product_name=product_id,
+                                                           successful=success,
+                                                           test_report=test_report)
+                    except Exception as ex:
+                        logger.error('Could not upload logs, will retry', exc_info=True)
+                        error('Could not upload logs, will retry [%s]', ex)
+                        time.sleep(1)
+                    else:
+                        break
 
 
 def execute_shell_command(fmt, *args, ignore_failure=False):
