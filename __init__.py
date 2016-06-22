@@ -36,7 +36,6 @@ import fnmatch
 import contextlib
 import tempfile
 import binascii
-import eventlet
 from functools import partial
 try:
     import readline  # @UnusedImport
@@ -60,9 +59,6 @@ logger = logging.getLogger(__name__)
 logger.info('STARTED')
 
 colorama.init()
-
-# Clearly, this artifact is full of dark magic. If something fails mysteriously, try to remove this thing and try again.
-eventlet.monkey_patch()
 
 server = DEFAULT_SERVER
 
@@ -94,14 +90,14 @@ class APIContext:
     def _call(self, call, **arguments):
         logger.debug('Calling %r with %r', call, arguments)
 
+        # TODO: ENFORCE REQUEST TIMEOUTS
+        # DO NOT USE EVENTLET, IT BREAKS PYUAVCAN
         endpoint = _make_api_endpoint(self.login, self.password, call)
         if len(arguments):
             data = json.dumps(arguments)
-            with eventlet.Timeout(REQUEST_TIMEOUT):
-                resp = requests.post(endpoint, data=data, timeout=REQUEST_TIMEOUT)
+            resp = requests.post(endpoint, data=data, timeout=REQUEST_TIMEOUT)
         else:
-            with eventlet.Timeout(REQUEST_TIMEOUT):
-                resp = requests.get(endpoint, timeout=REQUEST_TIMEOUT)
+            resp = requests.get(endpoint, timeout=REQUEST_TIMEOUT)
 
         if resp.status_code == http_codes.PAYMENT_REQUIRED:
             raise APIException('PAYMENT REQUIRED [%s]' % resp.text)
