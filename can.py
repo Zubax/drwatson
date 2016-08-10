@@ -20,10 +20,11 @@ Simple wrapper over SocketCAN and an SLCAN driver.
 Requires Python 3.4 or newer.
 """
 
+import binascii
 import struct
 import select
 import time
-import binascii
+import re
 from logging import getLogger
 
 
@@ -304,6 +305,33 @@ class SLCAN:
     def send_ext(self, id, data, timeout=None):  # @ReservedAssignment
         self.send(id, data, True, timeout)
 
+    def execute_cli_command(self, command, timeout=None):
+        # While the command is being executed, incoming frames will be lost.
+        # SLCAN driver from PyUAVCAN goes at great lengths to properly separate CLI response lines
+        # from SLCAN messages in real time with minimal additional latency, so use it if you care about this.
+        timeout = self._resolve_timeout(timeout)
+        self.port.writeTimeout = timeout
+        command += '\r\n'
+        self._write(command)
+
+        deadline = time.monotonic() + (timeout if timeout is not None else 999999999)
+        self.port.timeout = 1
+        response = bytes()
+
+        while True:
+            if time.monotonic() > deadline:
+                raise TimeoutException('SLCAN CLI response timeout; command: %r' % command)
+
+            b = self.port.read()
+            if b == self.CLI_END_OF_TEXT:
+                break
+            if b:
+                response += b
+
+        # Removing SLCAN lines from response
+        return re.sub(r'.*\r[^\n]', '', response.decode()).strip().replace(command, '')
+
+
 if __name__ == '__main__':
     import sys
     import logging
@@ -312,6 +340,9 @@ if __name__ == '__main__':
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
 
     drv = SLCAN(glob.glob('/dev/serial/by-id/*Zubax_Babel*')[0], 1000000)
+
+    print(drv.execute_cli_command('zubax_id', 1))
+    print(drv.execute_cli_command('stat'))
 
     r = None
     while True:
