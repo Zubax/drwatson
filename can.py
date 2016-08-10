@@ -16,33 +16,45 @@
 #
 
 """
-This is a simple wrapper over SocketCAN.
+Simple wrapper over SocketCAN and an SLCAN driver.
 Requires Python 3.4 or newer.
 """
 
-import socket
 import struct
 import select
+import time
+import binascii
+from logging import getLogger
 
 
-class TimeoutException(TimeoutError):
+logger = getLogger(__name__)
+
+
+STD_ID_MASK = 0x000007FF
+EXT_ID_MASK = 0x1FFFFFFF
+MAX_LEN = 8
+
+
+class CANDriverException(Exception):
     pass
 
 
-class Bus:
+class TimeoutException(CANDriverException, TimeoutError):
+    pass
+
+
+# noinspection PyShadowingBuiltins
+class SocketCAN:
     FORMAT = '=IB3x8s'
     IO_SIZE = 16
-    STD_ID_MASK = 0x000007FF
-    EXT_ID_MASK = 0x1FFFFFFF
     EXT_ID_FLAG = 1 << 31
-    MAX_LEN = 8
 
     @staticmethod
     def _parse_frame(frame):
-        id, can_dlc, data = struct.unpack(Bus.FORMAT, frame)  # @ReservedAssignment
-        ext = bool(id & Bus.EXT_ID_FLAG)
+        id, can_dlc, data = struct.unpack(SocketCAN.FORMAT, frame)  # @ReservedAssignment
+        ext = bool(id & SocketCAN.EXT_ID_FLAG)
         return {
-            'id': id & Bus.EXT_ID_MASK,
+            'id': id & EXT_ID_MASK,
             'data': data[:can_dlc],
             'ext': ext
         }
@@ -55,17 +67,18 @@ class Bus:
         if not isinstance(data, bytes):
             data = bytes(data)
 
-        assert id & (Bus.EXT_ID_MASK if ext else Bus.STD_ID_MASK) == id
-        assert len(data) <= Bus.MAX_LEN
+        assert id & (EXT_ID_MASK if ext else STD_ID_MASK) == id
+        assert len(data) <= MAX_LEN
 
         if ext:
-            id |= Bus.EXT_ID_FLAG
+            id |= SocketCAN.EXT_ID_FLAG
 
         can_dlc = len(data)
-        data = data.ljust(Bus.MAX_LEN, b'\x00')
-        return struct.pack(Bus.FORMAT, id, can_dlc, data)
+        data = data.ljust(MAX_LEN, b'\x00')
+        return struct.pack(SocketCAN.FORMAT, id, can_dlc, data)
 
     def __init__(self, iface_name, default_timeout=None):
+        import socket
         self.default_timeout = default_timeout
 
         self.socket = socket.socket(socket.AF_CAN, socket.SOCK_RAW, socket.CAN_RAW)
@@ -106,3 +119,206 @@ class Bus:
 
     def close(self):
         self.socket.close()
+
+
+# noinspection PyPep8Naming
+def Bus(*args, **kwargs):
+    from warnings import warn
+    warn('Class Bus is deprecated, use SocketCAN instead')
+    return SocketCAN(*args, **kwargs)
+
+
+# noinspection PyShadowingBuiltins
+class SLCAN:
+    """
+    A basic SLCAN adapter driver.
+    This class is only suitable for very simple, low-traffic applications.
+    For a full-featured SLCAN driver, optimized for high-traffic applications,
+    with timestamp recovery etc, please refer to the PyUAVCAN library.
+    """
+
+    ACK = b'\r'
+    NAK = b'\a'
+    CLI_END_OF_LINE = b'\r\n'
+    CLI_END_OF_TEXT = b'\x03'
+
+    def _write(self, data):
+        if isinstance(data, str):
+            data = data.encode()
+        self.port.write(data)
+
+    def _read_packet(self, timeout):
+        out = bytes()
+        self.port.timeout = timeout
+        while True:
+            b = self.port.read()
+            if not b:
+                raise TimeoutException('SLCAN port read timeout')
+            out += b
+            if b in (self.ACK, self.NAK):
+                break
+        return out
+
+    def _execute_slcan_command(self, command, timeout=1):
+        if isinstance(command, str):
+            command = command.encode()
+        self._write(command + self.ACK)
+        self.port.flush()
+        response = self._read_packet(timeout)
+        if self.NAK in response:
+            raise CANDriverException('NAK in response: %r -> %r', command, response)
+        return response
+
+    def _init(self, bitrate):
+        try:
+            speed_code = {
+                1000000: 8,
+                800000:  7,
+                500000:  6,
+                250000:  5,
+                125000:  4,
+                100000:  3,
+                50000:   2,
+                20000:   1,
+                10000:   0
+            }[bitrate]
+        except KeyError:
+            raise CANDriverException('Unsupported CAN bitrate: %r' % bitrate)
+
+        # Sending an empty command in order to reset the adapter's command parser, then discarding all output
+        try:
+            self._execute_slcan_command('')
+        except CANDriverException:
+            pass
+        self.port.flushInput()
+
+        # Making sure the channel is closed - some adapters may refuse to re-open if the channel is already open
+        try:
+            self._execute_slcan_command('C')
+        except CANDriverException:
+            pass
+
+        # Setting speed code
+        self._execute_slcan_command('S%d' % speed_code)
+
+        # Opening the channel
+        self._execute_slcan_command('O')
+
+        # Clearing error flags
+        try:
+            self._execute_slcan_command('F')
+        except CANDriverException as ex:
+            logger.info('SLCAN: Could not clear error flags (command not supported by the CAN adapter?): %s', ex)
+
+    def __init__(self, port, bitrate, baudrate=115200, default_timeout=None):
+        import serial
+        self.port = serial.Serial(port, baudrate=baudrate)
+        self.default_timeout = default_timeout
+
+        remaining_attempts = 3
+        while True:
+            remaining_attempts -= 1
+            # noinspection PyBroadException
+            try:
+                self._init(bitrate)
+            except Exception:
+                if remaining_attempts >= 0:
+                    logger.error('SLCAN init failed, will retry', exc_info=True)
+                else:
+                    raise
+            else:
+                break
+
+        # Discarding all output again
+        time.sleep(0.1)
+        self.port.flushInput()
+
+        logger.debug('SLCAN init OK; %d unused attempts', remaining_attempts)
+
+    def __del__(self):
+        logger.info('SLCAN: closing on delete')
+        try:
+            self._execute_slcan_command('C')
+        except Exception:
+            logger.error('SLCAN could not be closed, error ignored', exc_info=True)
+
+    def close(self):
+        try:
+            self._execute_slcan_command('C')
+        except Exception:
+            logger.error('SLCAN could not be closed, error ignored', exc_info=True)
+
+    def _resolve_timeout(self, timeout):
+        return timeout if timeout is not None else self.default_timeout  # Which also may be None
+
+    def _process_slcan_line(self, line):
+        # This function was taken from the PyUAVCAN SLCAN driver
+        line = line.strip().strip(self.NAK).strip(self.CLI_END_OF_TEXT)
+
+        if len(line) < 1:
+            return
+
+        # Checking the header, ignore all irrelevant lines
+        if line[0] == b'T'[0]:
+            id_len = 8
+        elif line[0] == b't'[0]:
+            id_len = 3
+        else:
+            return
+
+        # Parsing ID and DLC
+        packet_id = int(line[1:1 + id_len], 16)
+        packet_len = line[1 + id_len] - 48
+
+        if packet_len > 8 or packet_len < 0:
+            raise CANDriverException('SLCAN: Invalid packet length [%d]' % packet_len)
+
+        packet_data = binascii.a2b_hex(line[2 + id_len:2 + id_len + packet_len * 2])
+
+        # Timestamp ignored (PyUAVCAN does correctly parse timestamps and syncs clocks using the Olson algorithm)
+        return {
+            'id': packet_id,
+            'data': packet_data,
+            'ext': id_len == 8
+        }
+
+    def receive(self, timeout=None):
+        while True:
+            packet = self._read_packet(self._resolve_timeout(timeout))
+            try:
+                frame = self._process_slcan_line(packet)
+                if frame:
+                    return frame
+            except Exception:
+                logger.warning('SLCAN packet parsing error; packet: %r', packet, exc_info=True)
+
+    def send(self, id, data, extended, timeout=None):  # @ReservedAssignment
+        self.port.writeTimeout = self._resolve_timeout(timeout)
+        line = '%s%d%s\r' % (('T%08X' if extended else 't%03X') % id, len(data), binascii.b2a_hex(data).decode('ascii'))
+        self.port.write(line.encode('ascii'))
+        self.port.flush()
+
+    def send_std(self, id, data, timeout=None):  # @ReservedAssignment
+        self.send(id, data, False, timeout)
+
+    def send_ext(self, id, data, timeout=None):  # @ReservedAssignment
+        self.send(id, data, True, timeout)
+
+if __name__ == '__main__':
+    import sys
+    import logging
+    import glob
+
+    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
+
+    drv = SLCAN(glob.glob('/dev/serial/by-id/*Zubax_Babel*')[0], 1000000)
+
+    r = None
+    while True:
+        try:
+            r = drv.receive(1)
+            print(r)
+        except TimeoutException:
+            pass
+        if r:
+            (drv.send_ext if r['ext'] else drv.send_std)(r['id'], r['data'])
