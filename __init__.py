@@ -581,12 +581,20 @@ class SerialCLI:
         self._io = serial_port
         self._echo_bytes = []
         self.default_timeout = default_timeout or 1
-        self.flush_input(self.default_timeout)
+        self.reset(self.default_timeout)
 
     def flush_input(self, delay=None):
         if delay:
             time.sleep(delay)
         self._io.flushInput()
+
+    def reset(self, delay=0.1):
+        """
+        Use this method to bring the CLI back to the default state of awaiting command.
+        """
+        self._io.write(b'\r\n' * 3)
+        self.flush_input(delay)
+        self._echo_bytes = []
 
     def write_line(self, fmt, *args):
         bs = ((fmt % args) + '\r\n').encode()
@@ -603,7 +611,8 @@ class SerialCLI:
         self._echo_bytes += list(bs)
 
     def read_line(self, timeout=None):
-        """Returns a tuple (bool, str). The first item is False if the timeout has expired, otherwise True.
+        """
+        Returns a tuple (bool, str). The first item is False if the timeout has expired, otherwise True.
         """
         self._io.timeout = timeout if timeout is not None else self.default_timeout
         out_bytes = []
@@ -638,6 +647,10 @@ class SerialCLI:
         return lines
 
     def read_zubax_id(self):
+        """
+        Returns a dict parsed from the YAML response to the command 'zubax_id'.
+        """
+        self.reset()
         zubax_id_lines = self.write_line_and_read_output_lines_until_timeout('zubax_id')
         zubax_id_lines_joined = '\n'.join(zubax_id_lines)
         try:
