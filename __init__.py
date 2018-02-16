@@ -235,7 +235,7 @@ def download_newest(glob_url, encoding=None):
     c = easywebdav.connect(domain_name, protocol=protocol)
 
     matching_item = None
-    for item in sorted(c.ls(directory), key=lambda x: x.ctime, reverse=True):
+    for item in sorted(c.ls(directory), key=lambda x: x.mtime, reverse=True):
         if item.name.strip('/') == directory.strip('/'):
             continue
         if fnmatch.fnmatch(item.name, path_glob):
