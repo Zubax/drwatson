@@ -36,6 +36,7 @@ import fnmatch
 import contextlib
 import tempfile
 import binascii
+import datetime
 from functools import partial
 try:
     import readline  # @UnusedImport
@@ -49,7 +50,6 @@ APP_DATA_PATH = os.path.join(os.path.expanduser("~"), '.zubax', 'drwatson')
 LOG_FILE_PATH = 'drwatson.log'
 LOG_RECORD_FORMAT = '%(asctime)s %(levelname)-8s %(name)-25s %(message)s'
 REQUEST_TIMEOUT = 20
-
 
 # Default config - log everything into a file; stderr loggers will be added from init()
 logging.basicConfig(filename=LOG_FILE_PATH, level=logging.DEBUG, format=LOG_RECORD_FORMAT)
@@ -235,7 +235,7 @@ def download_newest(glob_url, encoding=None):
     c = easywebdav.connect(domain_name, protocol=protocol)
 
     matching_item = None
-    for item in sorted(c.ls(directory), key=lambda x: x.mtime, reverse=True):
+    for item in sorted(c.ls(directory), key=lambda x: _parse_http_last_modified(x.mtime), reverse=True):
         if item.name.strip('/') == directory.strip('/'):
             continue
         if fnmatch.fnmatch(item.name, path_glob):
@@ -472,6 +472,12 @@ def _b64_decode(x):
 def _ordinary():
     import random
     return random.random() >= 0.01
+
+
+def _parse_http_last_modified(text):
+    # https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Last-Modified
+    # https://tools.ietf.org/html/rfc2518 (search for "getlastmodified")
+    return datetime.datetime.strptime(text, '%a, %d %b %Y %H:%M:%S GMT')
 
 
 def init(description, *arg_initializers, require_root=False):
