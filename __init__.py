@@ -23,7 +23,6 @@ import getpass
 import json
 import yaml
 import os
-import base64
 import logging
 import http.client as http_codes
 import colorama
@@ -76,10 +75,10 @@ class ResponseParams(dict):
         super(ResponseParams, self).__init__(*args, **kwargs)
         self.__dict__ = self
 
-    def _b64_decode_existing_params(self, param_names):
+    def _hex_decode_existing_params(self, param_names):
         for p in param_names:
             if p in self:
-                self[p] = _b64_decode(self[p])
+                self[p] = _hex_decode(self[p])
 
 
 class APIContext:
@@ -116,17 +115,17 @@ class APIContext:
 
     def generate_signature(self, unique_id, product_name):
         resp = self._call('signature/generate',
-                          unique_id=_b64_encode(unique_id),
+                          unique_id=_hex_encode(unique_id),
                           product_name=product_name)
 
-        resp._b64_decode_existing_params(['unique_id', 'signature'])
+        resp._hex_decode_existing_params(['unique_id', 'signature'])
         return resp
 
     def verify_signature(self, unique_id, product_name, signature):
         return self._call('signature/verify',
-                          unique_id=_b64_encode(unique_id),
+                          unique_id=_hex_encode(unique_id),
                           product_name=product_name,
-                          signature=_b64_encode(signature))
+                          signature=_hex_encode(signature))
 
     def upload_test_report(self, unique_id, product_name, successful, test_report):
         # Chto mne sneg chto me znoi chto mne dozhdik prolivnoi
@@ -135,7 +134,7 @@ class APIContext:
 
         # ...kogda moi druzia so mnoi
         if unique_id:
-            unique_id = _b64_encode(unique_id)
+            unique_id = _hex_encode(unique_id)
 
         return self._call('test_report',
                           product_name=product_name,
@@ -457,16 +456,18 @@ def _make_api_endpoint(login, password, call):
     return endpoint
 
 
-def _b64_encode(x):
+def _hex_encode(x):
     if isinstance(x, str):
         x = x.encode('utf8')
+
     if not isinstance(x, bytes):
         x = bytes(x)
-    return base64.b64encode(x).decode()
+
+    return binascii.hexlify(x).decode()
 
 
-def _b64_decode(x):
-    return base64.b64decode(x, validate=True)
+def _hex_decode(x):
+    return binascii.unhexlify(x.strip())
 
 
 def _ordinary():
