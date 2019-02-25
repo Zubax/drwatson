@@ -437,10 +437,10 @@ def run(api_context: APIContext,
                 info('\nExit')
                 break
             except AbortException as ex:
-                error('ABORTED: %s', str(ex))
+                error('ABORTED: %s', ex)
             except Exception as ex:
                 logger.info('Main loop error: %r', ex, exc_info=True)
-                error('FAILURE: %r', ex)
+                error('FAILURE: %s', ex)
             finally:
                 sys.stdout.write(colorama.Style.RESET_ALL)  # @UndefinedVariable
 
