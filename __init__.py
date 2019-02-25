@@ -374,7 +374,9 @@ def enforce(condition, fmt, *args):
         abort(fmt, *args)
 
 
-def run(api_context: APIContext, handler):
+def run(api_context: APIContext,
+        handler,
+        require_pressing_enter_on_every_iteration=True):
     """
     Args:
         api_context:    An instance of APIContext.
@@ -383,20 +385,43 @@ def run(api_context: APIContext, handler):
                         with the product name and unique ID of the connected device as soon as it becomes known.
                         Signature:
                             callback(product_name, unique_id)
+
+        require_pressing_enter_on_every_iteration: Require the user to press ENTER before running the handler.
     """
     while True:
         product_id = None
         unique_id = None
         success = False
 
-        def set_device_info(product_id_, unique_id_):
+        def set_device_info(new_product_id, new_unique_id):
             nonlocal product_id, unique_id
-            product_id = product_id_
-            unique_id = unique_id_
-            logger.info('Device identified: PID: %r, UID: %s', product_id, binascii.hexlify(unique_id))
+            updated = False
 
-        print('=' * 80)
-        input('Press ENTER to begin, Ctrl+C to exit')       # We don't need this in logs
+            if product_id is None:
+                updated = True
+                assert isinstance(new_product_id, str)
+                product_id = new_product_id
+            else:
+                enforce(product_id == new_product_id,
+                        'The testing application has attempted to change the product ID '
+                        f'from {product_id} to {new_product_id} while testing session was in progress')
+
+            if unique_id is None:
+                updated = True
+                assert isinstance(new_unique_id, bytes)
+                unique_id = new_unique_id
+            else:
+                enforce(unique_id == new_unique_id,
+                        'The testing application has attempted to change the unique ID '
+                        f'from {unique_id.hex()} to {new_unique_id.hex()} while testing session was in progress')
+
+            if updated:
+                logger.info('Device identified: PID: %r, UID: %s', product_id, binascii.hexlify(unique_id))
+                info('Info page for this device: https://device.zubax.com/device_info?uid=%s', unique_id.hex())
+
+        print(' Press Ctrl+C to exit '.center(80, '='))
+        if require_pressing_enter_on_every_iteration:
+            input('Press ENTER to begin', same_line=True)
 
         with LogCollector() as log_collector:
             try:
