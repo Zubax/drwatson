@@ -24,6 +24,7 @@ Requires Python 3.4 or newer.
 try:
     import drwatson.can as can      # If used as part of Drwatson
 except ImportError:
+    # noinspection PyUnresolvedReferences
     import can                      # If used as a standalone script
 
 import struct
@@ -96,17 +97,17 @@ class BootloaderInterface:
         self.bus = can.Bus(iface_name, self.TIMEOUT)
 
     @staticmethod
-    def _serialize_sdo_payload(payload, format=None):  # @ReservedAssignment
+    def _serialize_sdo_payload(payload, fmt=None):  # @ReservedAssignment
         if payload is None:
             payload = bytes()
 
         if not isinstance(payload, bytes):
-            format = {  # @ReservedAssignment
+            fmt = {  # @ReservedAssignment
                 'u32': 'I',
                 'u16': 'H',
                 'u8': 'B',
-            }[format]
-            payload = struct.pack('<' + format, payload)
+            }[fmt]
+            payload = struct.pack('<' + fmt, payload)
 
         assert len(payload) <= 4
         return payload
@@ -165,9 +166,9 @@ class BootloaderInterface:
 
             return True
 
-        f = self._send_and_wait_response(payload, response_validator, timeout=timeout)
-        resp_command = f['data'][0]
-        resp_payload = f['data'][4:]
+        r = self._send_and_wait_response(payload, response_validator, timeout=timeout)
+        resp_command = r['data'][0]
+        resp_payload = r['data'][4:]
         logger.debug('SDO response cmd=%02x payload=%s', resp_command, ','.join('%02x' % x for x in resp_payload))
         return resp_command, resp_payload
 
@@ -191,6 +192,7 @@ class BootloaderInterface:
         command_spec = SDOClientCommandSpecifier.initiate_download
         command_byte = (command_spec << 5) | 1                      # With size, 4 bytes
 
+        # noinspection PyTypeChecker
         req_payload = self._serialize_sdo_payload(len(data), 'u32')
 
         self._sdo_request(index, subindex, command_byte, SDOServerCommandSpecifier.initiate_download, req_payload)
@@ -244,10 +246,10 @@ class BootloaderInterface:
                     raise Exception('Upload toggle mismatch')
                 return True
 
-            f = self._send_and_wait_response(seg_payload, validator)
+            r = self._send_and_wait_response(seg_payload, validator)
             toggle = not toggle
 
-            cmd, payload = f['data'][0], f['data'][1:]
+            cmd, payload = r['data'][0], r['data'][1:]
 
             n = (cmd >> 1) & 0b111
             c = bool(cmd & 1)
@@ -387,7 +389,7 @@ class BootloaderInterface:
         self.bus.close()
 
 
-if __name__ == '__main__':
+def _test():
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
 
     if len(sys.argv) <= 1:
@@ -405,3 +407,7 @@ if __name__ == '__main__':
             bli.load_firmware(file_name)
 
         bli.reset()
+
+
+if __name__ == '__main__':
+    _test()

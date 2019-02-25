@@ -86,6 +86,7 @@ class APIContext:
         self.login = login
         self.password = password
 
+    # noinspection PyUnresolvedReferences
     def _call(self, call, **arguments):
         logger.debug('Calling %r with %r', call, arguments)
 
@@ -113,6 +114,7 @@ class APIContext:
     def get_balance(self):
         return self._call('balance')
 
+    # noinspection PyProtectedMember
     def generate_signature(self, unique_id, product_name):
         resp = self._call('signature/generate',
                           unique_id=_hex_encode(unique_id),
@@ -127,6 +129,7 @@ class APIContext:
                           product_name=product_name,
                           signature=_hex_encode(signature))
 
+    # noinspection SpellCheckingInspection
     def upload_test_report(self, unique_id, product_name, successful, test_report):
         # Chto mne sneg chto me znoi chto mne dozhdik prolivnoi
         if isinstance(test_report, bytes):
@@ -146,6 +149,7 @@ class APIContext:
 def make_api_context_with_user_provided_credentials():
     # Reading login from cache
     login_cache_path = os.path.join(APP_DATA_PATH, 'licensing_login')
+    # noinspection PyBroadException
     try:
         with open(login_cache_path) as f:
             login = f.read().strip()
@@ -155,19 +159,16 @@ def make_api_context_with_user_provided_credentials():
 
     # Running in the loop until the user provides valid credentials
     while True:
-        try:
-            imperative('Enter your credentials for %r', server)
+        imperative('Enter your credentials for %r', server)
 
-            provided_login = input(('Login [%s]: ' % login) if login else 'Login: ', same_line=True)
-            login = provided_login or login
+        provided_login = input(('Login [%s]: ' % login) if login else 'Login: ', same_line=True)
+        login = provided_login or login
 
-            imperative('Password: ', end='')
-            password = getpass.getpass('')
-        except KeyboardInterrupt:
-            info('Exit')
-            exit()
+        imperative('Password: ', end='')
+        password = getpass.getpass('')
 
         with CLIWaitCursor():
+            info('Logging into the licensing system...')
             try:
                 response = requests.get(_make_api_endpoint(login, password, 'balance'), timeout=REQUEST_TIMEOUT)
             except Exception as ex:
@@ -176,6 +177,7 @@ def make_api_context_with_user_provided_credentials():
                 info('Error info: %r', ex)
                 continue
 
+        # noinspection PyUnresolvedReferences
         if response.status_code == http_codes.UNAUTHORIZED:
             info('Incorrect credentials')
         elif response.status_code == http_codes.OK:
@@ -187,7 +189,9 @@ def make_api_context_with_user_provided_credentials():
         info('We like you')
 
     # Trying to cache the login
+    # noinspection PyBroadException
     try:
+        # noinspection PyBroadException
         try:
             os.makedirs(APP_DATA_PATH, exist_ok=True)
         except Exception:
@@ -204,8 +208,8 @@ def make_api_context_with_user_provided_credentials():
 def download(url, encoding=None):
     logger.debug('Downloading %r', url)
 
-    def decode(data):
-        return data.decode(encoding) if encoding else data
+    def decode(d):
+        return d.decode(encoding) if encoding else d
 
     if '://' in url[:10]:
         r = requests.get(url, stream=True, timeout=REQUEST_TIMEOUT)
@@ -225,6 +229,7 @@ def download_newest(glob_url, encoding=None):
         import easywebdav
     except ImportError:
         fatal('Please install the missing dependency: pip3 install easywebdav')
+        raise       # This is necessary to suppress linter warnings
 
     protocol, _rest = glob_url.split('://', 1)
     domain_name, path_glob = _rest.split('/', 1) if '/' in _rest else (_rest, '')
@@ -263,6 +268,7 @@ def open_serial_port(port_glob, baudrate=None, timeout=None, use_contextmanager=
         import serial
     except ImportError:
         fatal('Please install the missing dependency: pip3 install pyserial')
+        raise       # This is necessary to suppress linter warnings
 
     while True:
         port = glob_one(port_glob, return_none_if_not_found=True)
@@ -310,6 +316,7 @@ def _print_impl(logging_header, color, fmt, *args, end='\n'):
     sys.stdout.write(colorama.Style.RESET_ALL)  # @UndefinedVariable
     sys.stdout.flush()
 
+
 imperative = partial(_print_impl, 'IMPERATIVE', colorama.Fore.GREEN)    # @UndefinedVariable
 error = partial(_print_impl, 'ERROR', colorama.Fore.RED)                # @UndefinedVariable
 warning = partial(_print_impl, 'WARNING', colorama.Fore.YELLOW)         # @UndefinedVariable
@@ -319,6 +326,7 @@ info = partial(_print_impl, 'INFO', colorama.Fore.WHITE)                # @Undef
 _native_input = input
 
 
+# noinspection PyShadowingBuiltins
 def input(fmt, *args, yes_no=False, default_answer=False, same_line=False):  # @ReservedAssignment
     with CLIWaitCursor.Suppressor():
         text = fmt % args
@@ -502,6 +510,7 @@ def init(description, *arg_initializers, require_root=False):
         2: logging.DEBUG
     }.get(args.verbose, logging.DEBUG)
 
+    # noinspection PyUnresolvedReferences
     max_logger_name_len = max(map(len, logging.Logger.manager.loggerDict.keys()))                  # @UndefinedVariable
     formatter = logging.Formatter('{}%(asctime)s %(levelname)-.1s %(name)-{}s{} %(message)s'
                                   .format(colorama.Style.BRIGHT + colorama.Fore.BLUE,              # @UndefinedVariable
@@ -531,6 +540,7 @@ def init(description, *arg_initializers, require_root=False):
 
 def catch(exception=Exception, return_on_catch=None):
     def decorate(function):
+        # noinspection PyBroadException
         def wrapper(*args, **kwargs):
             try:
                 return function(*args, **kwargs)
@@ -682,6 +692,7 @@ class BackgroundCLIListener(threading.Thread):
         self._line_callback = line_callback
         self._keep_going = True
 
+    # noinspection PyBroadException
     def run(self):
         while self._keep_going:
             try:
@@ -718,6 +729,7 @@ class BackgroundSpinner(threading.Thread):
         self._spin_target = lambda: target(*args, **kwargs)
         self._keep_going = True
 
+    # noinspection PyBroadException
     def run(self):
         while self._keep_going:
             try:
@@ -773,8 +785,10 @@ def load_firmware_via_gdb(firmware_data,
                           gdb_monitor_scan_command):
     with tempfile.TemporaryDirectory('-drwatson') as tmpdir:
         logger.debug('Executable scratchpad directory: %r', tmpdir)
-        fn = lambda x: os.path.join(tmpdir, x)
-        runtc = lambda fmt, *a, **kw: execute_shell_command(toolchain_prefix + fmt, *a, **kw)
+        fn = partial(os.path.join, tmpdir)
+
+        def runtc(fmt, *a, **kw):
+            execute_shell_command(toolchain_prefix + fmt, *a, **kw)
 
         # Generating ELF from the downloaded binary
         with open(fn('fw.bin'), 'wb') as f:

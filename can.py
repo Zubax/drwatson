@@ -129,7 +129,7 @@ def Bus(*args, **kwargs):
     return SocketCAN(*args, **kwargs)
 
 
-# noinspection PyShadowingBuiltins
+# noinspection PyShadowingBuiltins,PyBroadException
 class SLCAN:
     """
     A basic SLCAN adapter driver.
