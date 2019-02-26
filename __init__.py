@@ -47,15 +47,15 @@ DEFAULT_SERVER = 'licensing.zubax.com'
 SUPPORT_EMAIL = 'licensing@zubax.com'
 APP_DATA_PATH = os.path.join(os.path.expanduser("~"), '.zubax', 'drwatson')
 LOG_FILE_PATH = 'drwatson.log'
-LOG_RECORD_FORMAT = '%(asctime)s %(levelname)-8s %(name)-25s %(message)s'
+LOG_RECORD_FORMAT = '%(asctime)s %(process)5d %(levelname)-8s %(name)-25s %(message)s'
 REQUEST_TIMEOUT = 20
 
 # Default config - log everything into a file; stderr loggers will be added from init()
 logging.basicConfig(filename=LOG_FILE_PATH, level=logging.DEBUG, format=LOG_RECORD_FORMAT)
 logging.getLogger('uavcan.dsdl.parser').setLevel(logging.INFO)
 
-logger = logging.getLogger(__name__)
-logger.info('STARTED')
+_logger = logging.getLogger(__name__)
+_logger.info('STARTED')
 
 colorama.init()
 
@@ -88,7 +88,7 @@ class APIContext:
 
     # noinspection PyUnresolvedReferences
     def _call(self, call, **arguments):
-        logger.debug('Calling %r with %r', call, arguments)
+        _logger.debug('Calling %r with %r', call, arguments)
 
         # TODO: ENFORCE REQUEST TIMEOUTS
         # DO NOT USE EVENTLET, IT BREAKS PYUAVCAN
@@ -154,7 +154,7 @@ def make_api_context_with_user_provided_credentials():
         with open(login_cache_path) as f:
             login = f.read().strip()
     except Exception:
-        logger.debug('Could not read login cache', exc_info=True)
+        _logger.debug('Could not read login cache', exc_info=True)
         login = None
 
     # Running in the loop until the user provides valid credentials
@@ -172,7 +172,7 @@ def make_api_context_with_user_provided_credentials():
             try:
                 response = requests.get(_make_api_endpoint(login, password, 'balance'), timeout=REQUEST_TIMEOUT)
             except Exception as ex:
-                logger.info('Request failed with error: %r', ex, exc_info=True)
+                _logger.info('Request failed with error: %r', ex, exc_info=True)
                 error('Could not reach the server, please check your Internet connection.')
                 info('Error info: %r', ex)
                 continue
@@ -195,18 +195,18 @@ def make_api_context_with_user_provided_credentials():
         try:
             os.makedirs(APP_DATA_PATH, exist_ok=True)
         except Exception:
-            logger.debug('Could not create login cache dir', exc_info=True)
+            _logger.debug('Could not create login cache dir', exc_info=True)
         with open(login_cache_path, 'w') as f:
             f.write(login)
     except Exception:
-        logger.info('Could not write login cache', exc_info=True)
+        _logger.info('Could not write login cache', exc_info=True)
 
     # Returning new instance with newly supplied login credentials
     return APIContext(login, password)
 
 
 def download(url, encoding=None):
-    logger.debug('Downloading %r', url)
+    _logger.debug('Downloading %r', url)
 
     def decode(d):
         return d.decode(encoding) if encoding else d
@@ -216,7 +216,7 @@ def download(url, encoding=None):
         if r.status_code == 200:
             r.raw.decode_content = True
             data = r.raw.read()
-            logger.info('Downloaded %d bytes from %r', len(data), url)
+            _logger.info('Downloaded %d bytes from %r', len(data), url)
             return decode(data)
         raise DrwatsonException('Could not download %r: %r' % (url, r))
     else:
@@ -281,8 +281,8 @@ def open_serial_port(port_glob, baudrate=None, timeout=None, use_contextmanager=
 
     baudrate = baudrate or 115200
     timeout = timeout or 1
-    logger.debug('Opening serial port %r baudrate %r timeout %r',
-                 port, baudrate, timeout)
+    _logger.debug('Opening serial port %r baudrate %r timeout %r',
+                  port, baudrate, timeout)
 
     # TODO FIXME HACK
     # The line below is not supposed to exist - it is an ugly workaround to some sort of PySerial bug.
@@ -302,12 +302,12 @@ def open_serial_port(port_glob, baudrate=None, timeout=None, use_contextmanager=
     return ser
 
 
-ui_logger = logging.getLogger(__name__ + '_ui')
+_ui_logger = logging.getLogger(__name__ + '_ui')
 
 
 def _print_impl(logging_header, color, fmt, *args, end='\n'):
     text = fmt % args
-    ui_logger.debug(logging_header + '\n' + text)
+    _ui_logger.debug(logging_header + '\n' + text)
 
     sys.stdout.write(colorama.Style.BRIGHT + color)  # @UndefinedVariable
     sys.stdout.write(text)
@@ -330,7 +330,7 @@ _native_input = input
 def input(fmt, *args, yes_no=False, default_answer=False, same_line=False):  # @ReservedAssignment
     with CLIWaitCursor.Suppressor():
         text = fmt % args
-        ui_logger.debug('INPUT REQUEST\n' + text)
+        _ui_logger.debug('INPUT REQUEST\n' + text)
         if yes_no:
             text = text.rstrip() + (' (Y/n)' if default_answer else ' (y/N)')
         if text[-1] not in (' \t\r\n' if same_line else '\r\n'):
@@ -340,7 +340,7 @@ def input(fmt, *args, yes_no=False, default_answer=False, same_line=False):  # @
                             text +
                             colorama.Style.RESET_ALL)                       # @UndefinedVariable
 
-        ui_logger.debug('INPUT RESPONSE\n' + out)
+        _ui_logger.debug('INPUT RESPONSE\n' + out)
 
         if yes_no:
             if default_answer:
@@ -416,7 +416,7 @@ def run(api_context: APIContext,
                         f'from {unique_id.hex()} to {new_unique_id.hex()} while testing session was in progress')
 
             if updated:
-                logger.info('Device identified: PID: %r, UID: %s', product_id, binascii.hexlify(unique_id))
+                _logger.info('Device identified: PID: %r, UID: %s', product_id, binascii.hexlify(unique_id))
                 info('Info page for this device: https://device.zubax.com/device_info?uid=%s', unique_id.hex())
 
         print(' Press Ctrl+C to exit '.center(80, '='))
@@ -433,13 +433,13 @@ def run(api_context: APIContext,
 
                 info('COMPLETED SUCCESSFULLY')
             except KeyboardInterrupt:
-                logger.debug('KeyboardInterrupt in main loop', exc_info=True)
+                _logger.debug('KeyboardInterrupt in main loop', exc_info=True)
                 info('\nExit')
                 break
             except AbortException as ex:
                 error('ABORTED: %s', ex)
             except Exception as ex:
-                logger.info('Main loop error: %r', ex, exc_info=True)
+                _logger.info('Main loop error: %r', ex, exc_info=True)
                 error('FAILURE: %s', ex)
             finally:
                 sys.stdout.write(colorama.Style.RESET_ALL)  # @UndefinedVariable
@@ -450,17 +450,17 @@ def run(api_context: APIContext,
                     try:
                         with CLIWaitCursor():
                             log_messages = log_collector.take_messages()
-                            logger.info('Uploading %d lines of log; PID: %r, UID: %s',
-                                        len(log_messages),
-                                        product_id,
-                                        binascii.hexlify(unique_id) if unique_id else unique_id)
+                            _logger.info('Uploading %d lines of log; PID: %r, UID: %s',
+                                         len(log_messages),
+                                         product_id,
+                                         binascii.hexlify(unique_id) if unique_id else unique_id)
                             test_report = '\n'.join(log_messages)
                             api_context.upload_test_report(unique_id=unique_id,
                                                            product_name=product_id,
                                                            successful=success,
                                                            test_report=test_report)
                     except Exception as ex:
-                        logger.error('Could not upload logs, will retry', exc_info=True)
+                        _logger.error('Could not upload logs, will retry', exc_info=True)
                         error('Could not upload logs, will retry [%s]', ex)
                         time.sleep(1)
                     else:
@@ -469,12 +469,12 @@ def run(api_context: APIContext,
 
 def execute_shell_command(fmt, *args, ignore_failure=False):
     cmd = fmt % args
-    logger.debug('Executing: %r', cmd)
+    _logger.debug('Executing: %r', cmd)
     ret = os.system(cmd)
     if ret != 0:
         msg = 'Command exited with status %d: %r' % (ret, cmd)
         if ignore_failure:
-            logger.debug(msg)
+            _logger.debug(msg)
         else:
             raise DrwatsonException(msg)
     return ret
@@ -485,7 +485,7 @@ def _make_api_endpoint(login, password, call):
     protocol = 'http' if local else 'https'
     endpoint = '%s://%s:%s@%s/api/v1/%s' % (protocol, login, password, server, call)
     if not endpoint.startswith('https'):
-        logger.warning('USING INSECURE PROTOCOL')
+        _logger.warning('USING INSECURE PROTOCOL')
     return endpoint
 
 
@@ -640,7 +640,7 @@ class SerialCLI:
 
     def write_line(self, fmt, *args):
         bs = ((fmt % args) + '\r\n').encode()
-        logger.debug('SerialCLI: Writing %r', bs)
+        _logger.debug('SerialCLI: Writing %r', bs)
 
         def split_in_chunks(data, chunk_size):
             return [data[x: x + chunk_size] for x in range(0, len(data), chunk_size)]
@@ -669,8 +669,9 @@ class SerialCLI:
                 self._echo_bytes.pop(0)
             else:
                 if self._echo_bytes:
-                    logger.info('SerialCLI: Echo mismatch: got %r, expected %r. Buffer overflow or output interlacing?',
-                                chr(b), chr(self._echo_bytes[0]))
+                    _logger.info('SerialCLI: Echo mismatch: got %r, expected %r. '
+                                 'Buffer overflow or output interlacing?',
+                                 chr(b), chr(self._echo_bytes[0]))
                 out_bytes.append(b)
                 if b == b'\n'[0]:
                     break
@@ -698,9 +699,9 @@ class SerialCLI:
         try:
             zubax_id = yaml.load(zubax_id_lines_joined)
         except Exception:
-            logger.info('Could not parse YAML: %r', zubax_id_lines_joined)
+            _logger.info('Could not parse YAML: %r', zubax_id_lines_joined)
             raise
-        logger.info('SerialCLI: Zubax ID: %r', zubax_id)
+        _logger.info('SerialCLI: Zubax ID: %r', zubax_id)
         return zubax_id
 
 
@@ -725,18 +726,18 @@ class BackgroundCLIListener(threading.Thread):
                 if not timed_out:
                     self._line_callback(line)
             except Exception:
-                logger.error('BackgroundCLIListener error', exc_info=True)
+                _logger.error('BackgroundCLIListener error', exc_info=True)
 
     def __enter__(self):
-        logger.debug('Starting BackgroundCLIListener [%r]', self)
+        _logger.debug('Starting BackgroundCLIListener [%r]', self)
         self.start()
         return self
 
     def __exit__(self, *_whatever):
-        logger.debug('Stopping BackgroundCLIListener [%r]...', self)
+        _logger.debug('Stopping BackgroundCLIListener [%r]...', self)
         self._keep_going = False
         self.join()
-        logger.debug('BackgroundCLIListener [%r] stopped', self)
+        _logger.debug('BackgroundCLIListener [%r] stopped', self)
 
 
 class BackgroundSpinner(threading.Thread):
@@ -760,17 +761,17 @@ class BackgroundSpinner(threading.Thread):
             try:
                 self._spin_target()
             except Exception:
-                logger.error('Background spinner error', exc_info=True)
+                _logger.error('Background spinner error', exc_info=True)
 
     def __enter__(self):
-        logger.debug('Starting BackgroundSpinner [%r]', self)
+        _logger.debug('Starting BackgroundSpinner [%r]', self)
         self.start()
 
     def __exit__(self, _type, _value, _traceback):
-        logger.debug('Stopping BackgroundSpinner [%r]...', self)
+        _logger.debug('Stopping BackgroundSpinner [%r]...', self)
         self._keep_going = False
         self.join()
-        logger.debug('BackgroundSpinner [%r] stopped', self)
+        _logger.debug('BackgroundSpinner [%r] stopped', self)
 
 
 class BackgroundDelay(threading.Thread):
@@ -793,14 +794,14 @@ class BackgroundDelay(threading.Thread):
             self._dms_target()
 
     def __enter__(self):
-        logger.debug('Starting BackgroundDelay [%r]', self)
+        _logger.debug('Starting BackgroundDelay [%r]', self)
         self.start()
 
     def __exit__(self, _type, _value, _traceback):
-        logger.debug('Stopping BackgroundDelay [%r]...', self)
+        _logger.debug('Stopping BackgroundDelay [%r]...', self)
         self._event.set()
         self.join()
-        logger.debug('BackgroundDelay [%r] stopped', self)
+        _logger.debug('BackgroundDelay [%r] stopped', self)
 
 
 def load_firmware_via_gdb(firmware_data,
@@ -809,7 +810,7 @@ def load_firmware_via_gdb(firmware_data,
                           gdb_port,
                           gdb_monitor_scan_command):
     with tempfile.TemporaryDirectory('-drwatson') as tmpdir:
-        logger.debug('Executable scratchpad directory: %r', tmpdir)
+        _logger.debug('Executable scratchpad directory: %r', tmpdir)
         fn = partial(os.path.join, tmpdir)
 
         def runtc(fmt, *a, **kw):
@@ -873,8 +874,8 @@ class LogCollector(logging.Handler):
         with self._lock:
             logging.root.removeHandler(self)
             if exc_type is not None:
-                logger.info('LogCollector is closing due to an exception',
-                            exc_info=(exc_type, exc_value, exc_traceback))
+                _logger.info('LogCollector is closing due to an exception',
+                             exc_info=(exc_type, exc_value, exc_traceback))
 
     def emit(self, record):
         with self._lock:
