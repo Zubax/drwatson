@@ -135,7 +135,7 @@ class APIContext:
 
         if software_version:
             check_version(software_version)
-            args['hardware_version_major_minor'] = list(software_version)
+            args['software_version_major_minor'] = list(software_version)
 
         resp = self._call('signature/generate', **args)
         resp._hex_decode_existing_params(['unique_id', 'signature'])
