@@ -115,11 +115,29 @@ class APIContext:
         return self._call('balance')
 
     # noinspection PyProtectedMember
-    def generate_signature(self, unique_id, product_name):
-        resp = self._call('signature/generate',
-                          unique_id=_hex_encode(unique_id),
-                          product_name=product_name)
+    def generate_signature(self,
+                           unique_id,
+                           product_name,
+                           hardware_version=None,
+                           software_version=None):
+        def check_version(v):
+            if not isinstance(v, tuple) or len(v) != 2 \
+                    or not isinstance(v[0], int) or not (0 <= v[0] <= 255) \
+                    or not isinstance(v[1], int) or not (0 <= v[1] <= 255):
+                raise ValueError('The version specifier must be a tuple of two integers in [0, 255]')
 
+        args = dict(unique_id=_hex_encode(unique_id),
+                    product_name=product_name)
+
+        if hardware_version:
+            check_version(hardware_version)
+            args['hardware_version_major_minor'] = list(hardware_version)
+
+        if software_version:
+            check_version(software_version)
+            args['hardware_version_major_minor'] = list(software_version)
+
+        resp = self._call('signature/generate', **args)
         resp._hex_decode_existing_params(['unique_id', 'signature'])
         return resp
 
