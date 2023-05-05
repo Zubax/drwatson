@@ -715,7 +715,7 @@ class SerialCLI:
         zubax_id_lines = self.write_line_and_read_output_lines_until_timeout('zubax_id')
         zubax_id_lines_joined = '\n'.join(zubax_id_lines)
         try:
-            zubax_id = yaml.load(zubax_id_lines_joined)
+            zubax_id = yaml.load(zubax_id_lines_joined, yaml.Loader)
         except Exception:
             _logger.info('Could not parse YAML: %r', zubax_id_lines_joined)
             raise
